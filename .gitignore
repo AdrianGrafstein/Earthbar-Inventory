@@ -1,0 +1,11 @@
+# ── Never publish these ───────────────────────────────────────────
+# Mac junk
+.DS_Store
+
+# Internal business data (sales numbers, exports) — keep private
+*.xlsx
+*.csv
+
+# Credential files (none should live here, but just in case)
+.env
+.env.*

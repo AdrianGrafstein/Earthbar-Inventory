@@ -1,0 +1,1589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EarthBAR Inventory Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SUPABASE JS CLIENT (loaded from a CDN)
+       This <script> tag downloads the official Supabase library so we
+       can talk to our database. After it loads, a global variable
+       called `supabase` exists in the page with a createClient() method.
+  ────────────────────────────────────────────────────────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    /* ─────────────────────────────────────────
+       Base
+    ───────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --eb-black:   #151515;
+      --eb-green:   #279A4B;
+      --eb-green-d: #1e7a3b;
+      --eb-white:   #ffffff;
+      --eb-bg:      #f8f8f8;
+      --eb-border:  #e6e6e6;
+      --eb-gray1:   #8a8a8a;
+      --eb-gray2:   #acacac;
+      --eb-gray3:   #cacaca;
+      --eb-red:     #e93636;
+      --ease:       cubic-bezier(0.104, 0.204, 0.492, 1);
+      --marquee-speed: 38s;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: var(--eb-bg);
+      color: var(--eb-black);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─────────────────────────────────────────
+       Keyframes — lifted directly from earthbar.com
+    ───────────────────────────────────────── */
+    @keyframes marquee-left {
+      0%   { transform: translate(0); }
+      100% { transform: translate(-100%); }
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(28px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    @keyframes rule-grow {
+      from { transform: scaleX(0); transform-origin: left; }
+      to   { transform: scaleX(1); transform-origin: left; }
+    }
+
+    @keyframes row-in {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ─────────────────────────────────────────
+       Navbar
+    ───────────────────────────────────────── */
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      height: 60px;
+      background: var(--eb-white);
+      border-bottom: 1px solid var(--eb-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      animation: fade-in 0.5s var(--ease) both;
+    }
+
+    .nav-logo {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--eb-black);
+      text-decoration: none;
+    }
+
+    /* The EarthBAR logo image in the top-left of the navbar */
+    .nav-logo-img {
+      height: 30px;
+      width: auto;
+      display: block;
+    }
+
+    /* View-switcher tabs (Employee | Manager) live in the navbar */
+    .nav-views { display: flex; gap: 4px; }
+
+    .view-tab {
+      background: none;
+      border: none;
+      font-family: 'Roboto', sans-serif;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--eb-gray2);
+      cursor: pointer;
+      padding: 8px 14px;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s var(--ease);
+    }
+
+    .view-tab:hover { color: var(--eb-black); }
+
+    .view-tab.active {
+      color: var(--eb-black);
+      border-bottom-color: var(--eb-green);
+    }
+
+    /* ─────────────────────────────────────────
+       Marquee ticker — exact earthbar.com style
+    ───────────────────────────────────────── */
+    .marquee-strip {
+      background: var(--eb-black);
+      color: var(--eb-white);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      padding: 14px 0;
+      animation: fade-in 0.6s var(--ease) 0.1s both;
+    }
+
+    .marquee-inner {
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .marquee-inner > div {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      animation: marquee-left var(--marquee-speed) linear infinite;
+    }
+
+    .marquee-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      padding: 0 36px;
+    }
+
+    .marquee-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--eb-green);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* ─────────────────────────────────────────
+       Hero header
+    ───────────────────────────────────────── */
+    .hero {
+      padding: 56px 32px 48px;
+      max-width: 680px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .hero-eyebrow {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--eb-green);
+      display: block;
+      margin-bottom: 14px;
+      animation: fade-up 0.7s var(--ease) 0.2s both;
+    }
+
+    .hero h1 {
+      font-size: 2.8rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      color: var(--eb-black);
+      animation: fade-up 0.75s var(--ease) 0.35s both;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--eb-green);
+    }
+
+    .hero-sub {
+      font-size: 0.9375rem;
+      color: var(--eb-gray1);
+      margin-top: 14px;
+      font-weight: 400;
+      animation: fade-up 0.75s var(--ease) 0.5s both;
+    }
+
+    .hero-rule {
+      width: 48px;
+      height: 3px;
+      background: var(--eb-green);
+      margin: 24px auto 0;
+      animation: rule-grow 0.6s var(--ease) 0.7s both;
+    }
+
+    /* ─────────────────────────────────────────
+       Main content area
+    ───────────────────────────────────────── */
+    .content {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 20px 60px;
+    }
+
+    .content.wide { max-width: 960px; }
+
+    /* ─────────────────────────────────────────
+       Cards
+    ───────────────────────────────────────── */
+    .card {
+      background: var(--eb-white);
+      border: 1px solid var(--eb-border);
+      padding: 24px;
+      margin-bottom: 12px;
+    }
+
+    /* ─────────────────────────────────────────
+       Section label
+    ───────────────────────────────────────── */
+    .section-label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--eb-gray2);
+      margin-bottom: 14px;
+    }
+
+    /* ─────────────────────────────────────────
+       Form
+    ───────────────────────────────────────── */
+    .form-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .field.id   { width: 96px; }
+    .field.item { flex: 1; min-width: 140px; }
+    .field.qty  { width: 88px; }
+    .field.full { width: 100%; }
+
+    label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--eb-gray2);
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    select {
+      border: 1px solid var(--eb-border);
+      padding: 11px 13px;
+      font-size: 0.9375rem;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 400;
+      color: var(--eb-black);
+      background: var(--eb-white);
+      outline: none;
+      transition: border-color 0.25s var(--ease), box-shadow 0.25s var(--ease);
+      width: 100%;
+    }
+
+    select { cursor: pointer; }
+
+    input:focus, select:focus {
+      border-color: var(--eb-black);
+      box-shadow: 0 0 0 2px rgba(21,21,21,0.06);
+    }
+
+    input::placeholder { color: var(--eb-gray3); }
+
+    /* EarthBAR "Add" button — square, #151515, hover fills green */
+    button.add-btn {
+      background: var(--eb-black);
+      color: var(--eb-white);
+      border: none;
+      padding: 0 22px;
+      font-size: 0.75rem;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      white-space: nowrap;
+      height: 44px;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.25s var(--ease);
+    }
+
+    button.add-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--eb-green);
+      transform: rotate3d(0, 0, 1, -90deg) translateZ(0);
+      transition: transform 0.25s var(--ease);
+    }
+
+    button.add-btn:hover::before { transform: rotate3d(0, 0, 1, 0deg) translateZ(0); }
+
+    button.add-btn span {
+      position: relative;
+      z-index: 1;
+      transition: color 0.25s var(--ease);
+    }
+
+    /* Primary green "Submit" button — full width, used to send to Supabase */
+    button.submit-btn {
+      width: 100%;
+      background: var(--eb-green);
+      color: var(--eb-white);
+      border: none;
+      padding: 15px;
+      font-size: 0.8125rem;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s var(--ease);
+    }
+
+    button.submit-btn:hover { background: var(--eb-green-d); }
+    button.submit-btn:disabled { background: var(--eb-gray3); cursor: not-allowed; }
+
+    /* Secondary outline button — used for Unlock / Refresh */
+    button.sec-btn {
+      background: var(--eb-white);
+      border: 1px solid var(--eb-border);
+      color: var(--eb-black);
+      padding: 0 20px;
+      height: 44px;
+      font-size: 0.75rem;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s var(--ease);
+    }
+
+    button.sec-btn:hover { border-color: var(--eb-green); color: var(--eb-green); }
+
+    /* Row holding the "Save for Later" + "Submit" buttons side by side */
+    .action-row { display: flex; gap: 10px; align-items: stretch; }
+    .action-row .submit-btn { flex: 1; }
+    .action-row .sec-btn { height: auto; white-space: nowrap; }   /* stretch to submit height */
+
+    /* ─────────────────────────────────────────
+       Staged inventory list
+    ───────────────────────────────────────── */
+    .inventory-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .inventory-title {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--eb-gray2);
+    }
+
+    .inventory-title span { color: var(--eb-green); }
+
+    .clear-btn {
+      font-size: 0.75rem;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 500;
+      color: var(--eb-gray3);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      letter-spacing: 0.04em;
+      transition: color 0.2s var(--ease);
+    }
+
+    .clear-btn:hover { color: var(--eb-red); }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 0;
+      color: var(--eb-gray3);
+      font-size: 0.9375rem;
+      letter-spacing: 0.01em;
+    }
+
+    /* ─────────────────────────────────────────
+       Tables (staged list + dashboard)
+    ───────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; }
+
+    thead th {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--eb-gray3);
+      padding-bottom: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--eb-border);
+    }
+
+    thead th.id-col  { width: 80px; }
+    thead th.qty-col { text-align: right; width: 72px; }
+    thead th.del-col { width: 32px; }
+
+    tbody tr {
+      border-bottom: 1px solid #fafafa;
+      transition: background 0.2s var(--ease);
+    }
+
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #fafafa; }
+
+    tbody tr.row-new { animation: row-in 0.35s var(--ease) both; }
+
+    tbody td {
+      padding: 13px 0;
+      font-size: 0.9375rem;
+      vertical-align: middle;
+    }
+
+    .item-id {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--eb-gray2);
+      letter-spacing: 0.04em;
+    }
+
+    .item-name {
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+
+    .row-notes {
+      font-size: 0.75rem;
+      color: var(--eb-gray1);
+      font-weight: 400;
+      margin-top: 3px;
+    }
+
+    /* Color the quantity number in the stepper by stock level */
+    .qty-ok   { background: #e5f5ec; color: var(--eb-green); }
+    .qty-low  { background: #fff7e5; color: #b06a00; }
+    .qty-crit { background: #fde8e8; color: var(--eb-red); }
+
+    .del-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--eb-border);
+      font-size: 0.85rem;
+      padding: 0 4px;
+      line-height: 1;
+      transition: color 0.2s var(--ease);
+      font-family: 'Roboto', sans-serif;
+    }
+
+    .del-btn:hover { color: var(--eb-red); }
+
+    /* ─────────────────────────────────────────
+       Manager dashboard — pivot table
+    ───────────────────────────────────────── */
+    .dash-controls {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .dash-controls .field { flex: 1; min-width: 200px; }
+
+    .dash-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+
+    .dash-table th, .dash-table td {
+      padding: 11px 8px;
+      text-align: center;
+      border-bottom: 1px solid var(--eb-border);
+    }
+
+    .dash-table thead th {
+      font-size: 0.625rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--eb-gray2);
+      font-weight: 600;
+    }
+
+    .dash-table th.item-col, .dash-table td.item-col {
+      text-align: left;
+      font-weight: 500;
+    }
+
+    .dash-table td.total-col, .dash-table th.total-col {
+      font-weight: 700;
+      color: var(--eb-green);
+      background: #f4fbf6;
+    }
+
+    .dash-table tbody tr:hover { background: #fafafa; }
+
+    .dash-table tfoot td {
+      font-weight: 700;
+      border-top: 2px solid var(--eb-border);
+      border-bottom: none;
+      padding-top: 13px;
+    }
+
+    /* The dashboard can have many store columns, so let it scroll sideways */
+    #dashboard-table-wrap { overflow-x: auto; }
+
+    /* ─────────────────────────────────────────
+       Combobox (searchable dropdown) — used for BOTH the store
+       selector and the item-name autocomplete.
+    ───────────────────────────────────────── */
+    .combo { position: relative; width: 100%; }
+
+    /* The floating list of matches that drops down under the input */
+    .combo-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--eb-white);
+      border: 1px solid var(--eb-border);
+      border-top: none;
+      max-height: 260px;
+      overflow-y: auto;
+      z-index: 60;
+      display: none;                 /* hidden until .open is added */
+      box-shadow: 0 10px 28px rgba(0,0,0,0.10);
+    }
+
+    .combo-list.open { display: block; }
+
+    .combo-option {
+      padding: 10px 13px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-bottom: 1px solid #f4f4f4;
+      transition: background 0.12s var(--ease);
+    }
+
+    .combo-option:last-child { border-bottom: none; }
+
+    /* Highlight on hover OR when navigated to with arrow keys (.active) */
+    .combo-option:hover,
+    .combo-option.active {
+      background: var(--eb-bg);
+      color: var(--eb-green);
+    }
+
+    .combo-option strong { color: var(--eb-green); font-weight: 700; }
+    .combo-option:hover strong, .combo-option.active strong { color: var(--eb-green-d); }
+
+    .combo-note {
+      padding: 11px 13px;
+      color: var(--eb-gray2);
+      font-size: 0.8125rem;
+      font-style: italic;
+    }
+
+    /* ─────────────────────────────────────────
+       Quantity stepper ( −  3  + ) in the staged list
+    ───────────────────────────────────────── */
+    .qty-stepper {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      float: right;
+    }
+
+    .step-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--eb-border);
+      background: var(--eb-white);
+      cursor: pointer;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--eb-black);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      font-family: 'Roboto', sans-serif;
+      transition: all 0.15s var(--ease);
+    }
+
+    .step-btn:hover { border-color: var(--eb-green); color: var(--eb-green); }
+    .step-btn:active { background: var(--eb-bg); }
+
+    .qty-num {
+      min-width: 34px;
+      text-align: center;
+      padding: 3px 6px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    /* ─────────────────────────────────────────
+       Misc — config banner, toast messages
+    ───────────────────────────────────────── */
+    .config-banner {
+      background: #fff7e5;
+      border: 1px solid #f0d999;
+      color: #8a6400;
+      padding: 14px 18px;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      max-width: 640px;
+      margin: 20px auto -4px;
+    }
+
+    .config-banner code {
+      background: rgba(0,0,0,0.06);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.8125rem;
+    }
+
+    /* Floating toast for success / error feedback after a submit */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--eb-black);
+      color: var(--eb-white);
+      padding: 14px 24px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s var(--ease);
+      z-index: 300;
+      max-width: 90%;
+      text-align: center;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+    }
+
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { background: var(--eb-green); }
+    .toast.error   { background: var(--eb-red); }
+
+    .updated-at {
+      text-align: center;
+      font-size: 0.6875rem;
+      font-weight: 400;
+      color: var(--eb-gray3);
+      letter-spacing: 0.04em;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       NAVBAR  (shared by both views — holds the view switcher)
+  ════════════════════════════════════════════════════════════════ -->
+  <nav class="nav">
+    <!-- EarthBAR logo (top-left). The SVG file lives next to this HTML. -->
+    <img class="nav-logo-img" src="eb-logo.svg" alt="EarthBAR" />
+    <div class="nav-views">
+      <button class="view-tab active" id="tab-employee" onclick="showView('employee')">Employee</button>
+      <button class="view-tab" id="tab-manager" onclick="showView('manager')">Manager</button>
+    </div>
+  </nav>
+
+  <!-- Marquee — earthbar.com scrolling text component (shared).
+       The store names inside are generated from EB_STORES by buildMarquee()
+       in the script below, so it automatically reflects the full store list. -->
+  <div class="marquee-strip">
+    <div class="marquee-inner" id="marquee-inner"></div>
+  </div>
+
+  <!-- Shown only when SUPABASE_URL / SUPABASE_ANON_KEY are not filled in -->
+  <div id="config-banner" class="config-banner" style="display:none;">
+    ⚠️ <strong>Not connected to Supabase yet.</strong> Open this file in a text editor and fill in
+    <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> in the CONFIG block near the top of
+    the &lt;script&gt;. See <code>SETUP.md</code> for step-by-step instructions.
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       VIEW 1 — EMPLOYEE  (default view: count items + submit them)
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="employee-view">
+
+    <div class="hero">
+      <span class="hero-eyebrow">All Stores</span>
+      <h1>Inventory<br><em>Count</em></h1>
+      <p class="hero-sub">Submit this week's stock count for your store.</p>
+      <div class="hero-rule"></div>
+    </div>
+
+    <div class="content">
+
+      <!-- Location selector — a searchable dropdown of ALL stores.
+           Click it to scroll the full list, or type to filter live
+           (matches anywhere in the name, e.g. "Culver" finds "EQ Culver City"). -->
+      <div class="card">
+        <div class="section-label">Select Your Store</div>
+        <div class="combo" id="store-combo">
+          <input type="text" id="store-input" placeholder="Click to browse, or type to search…" autocomplete="off" />
+          <div class="combo-list" id="store-list"></div>
+        </div>
+      </div>
+
+      <!-- Add-item form — each "Add" stages a row in the list below -->
+      <div class="card">
+        <div class="section-label">Add Item to This Week's Count</div>
+        <div class="form-row">
+          <div class="field id">
+            <label for="item-id">Item ID</label>
+            <input type="text" id="item-id" placeholder="e.g. 1042" autocomplete="off" />
+          </div>
+          <div class="field item">
+            <label for="item-name">Item Name</label>
+            <!-- Item autocomplete: no dropdown until the user starts typing,
+                 then it shows matching items (matches anywhere in the name). -->
+            <div class="combo">
+              <input type="text" id="item-name" placeholder="Start typing an item name…" autocomplete="off" />
+              <div class="combo-list" id="item-list"></div>
+            </div>
+          </div>
+          <div class="field qty">
+            <label for="item-qty">Quantity</label>
+            <input type="number" id="item-qty" placeholder="0" min="0" />
+          </div>
+          <button class="add-btn" onclick="addItem()"><span>Add</span></button>
+        </div>
+        <div class="field full" style="margin-top:14px;">
+          <label for="item-notes">Notes (optional)</label>
+          <input type="text" id="item-notes" placeholder="e.g. running low, expires Friday" autocomplete="off" />
+        </div>
+      </div>
+
+      <!-- Staged list — items waiting to be submitted, then the Submit button -->
+      <div class="card">
+        <div class="inventory-header">
+          <div class="inventory-title">This Week's Count — <span id="location-display">No store selected</span></div>
+          <button class="clear-btn" onclick="clearAll()">Clear all</button>
+        </div>
+
+        <div id="empty-state" class="empty-state">Select a store and add items above.</div>
+
+        <table id="inventory-table" style="display:none;">
+          <thead>
+            <tr>
+              <th class="id-col">ID</th>
+              <th>Item</th>
+              <th class="qty-col">Qty</th>
+              <th class="del-col"></th>
+            </tr>
+          </thead>
+          <tbody id="inventory-body"></tbody>
+        </table>
+
+        <div id="submit-wrap" style="display:none; margin-top:22px;">
+          <div class="action-row">
+            <!-- Saves the list locally (NOT sent to the manager) so you can
+                 keep editing it throughout the week. -->
+            <button class="sec-btn" id="save-btn" onclick="saveDraft()">Save for Later</button>
+            <!-- Sends the finished count to the manager via Supabase. -->
+            <button class="submit-btn" id="submit-btn" onclick="submitInventory()">Submit This Week's Count</button>
+          </div>
+          <div class="updated-at" id="submit-hint"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       VIEW 2 — MANAGER DASHBOARD  (password-gated; reads all stores)
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="manager-view" style="display:none;">
+
+    <div class="hero">
+      <span class="hero-eyebrow">All Stores</span>
+      <h1>Manager<br><em>Dashboard</em></h1>
+      <p class="hero-sub">Every store, totaled by item, for any week.</p>
+      <div class="hero-rule"></div>
+    </div>
+
+    <!-- Password gate — shown until the correct password is entered -->
+    <div id="manager-locked" class="content">
+      <div class="card">
+        <div class="section-label">Manager Access</div>
+        <div class="form-row">
+          <div class="field item">
+            <label for="manager-pass">Password</label>
+            <input type="password" id="manager-pass" placeholder="Enter manager password" />
+          </div>
+          <button class="sec-btn" onclick="unlockManager()">Unlock</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard — hidden until unlocked -->
+    <div id="manager-dashboard" class="content wide" style="display:none;">
+      <div class="card">
+        <div class="section-label">View Week</div>
+        <div class="dash-controls">
+          <div class="field">
+            <label for="week-select">Week of (Monday)</label>
+            <select id="week-select" onchange="loadDashboard()"></select>
+          </div>
+          <button class="sec-btn" onclick="loadDashboard()">Refresh</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="dashboard-table-wrap">
+          <div class="empty-state">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Floating message used for success / error feedback -->
+  <div id="toast" class="toast"></div>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       STORE + ITEM LISTS
+       These two big lists live in their own file (inventory-data.js)
+       so this HTML stays readable. That file defines two globals:
+         EB_STORES = [ ...every store name... ]
+         EB_ITEMS  = [ ...every item name... ]
+       It must load BEFORE the main script below. See SETUP.md to learn
+       how to regenerate it from a plain text list.
+  ────────────────────────────────────────────────────────────────── -->
+  <script src="inventory-data.js"></script>
+
+  <script>
+    /* ═══════════════════════════════════════════════════════════════
+       CONFIG  ←←←  FILL THESE TWO IN  (see SETUP.md, Step 4)
+       ───────────────────────────────────────────────────────────────
+       SUPABASE_URL      = your project URL (looks like https://abcd1234.supabase.co)
+       SUPABASE_ANON_KEY = your project's "anon / public" API key (a long string)
+
+       These are SAFE to put in a public HTML file: the anon key only has the
+       permissions you grant it via Row Level Security (we allow read + insert,
+       but NOT update/delete — see supabase-schema.sql).
+    ═══════════════════════════════════════════════════════════════ */
+    const SUPABASE_URL      = "https://dnqdlfjdtvldnznrnvbo.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRucWRsZmpkdHZsZG56bnJudmJvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MDYzNDEsImV4cCI6MjA5NzI4MjM0MX0.JhXxf5cNNdIIb2b9C8dy9GWt49NpLI9lPq701y1Pbhg";
+
+    // Password to open the Manager Dashboard. Change this to whatever you like.
+    const MANAGER_PASSWORD = "$E@rthbar!nv3nt0ry.";
+
+    /* ───────────────────────────────────────────────────────────────
+       Store + item lists come from inventory-data.js (loaded above).
+       If that file is missing, we fall back to empty arrays so the page
+       still loads instead of crashing.
+    ─────────────────────────────────────────────────────────────── */
+    const STORES = (typeof EB_STORES !== "undefined") ? EB_STORES : [];
+    const ITEMS  = (typeof EB_ITEMS  !== "undefined") ? EB_ITEMS  : [];
+
+    /* ───────────────────────────────────────────────────────────────
+       Create the Supabase client (our connection to the database).
+       If the config hasn't been filled in yet, we leave `db` as null and
+       show a friendly banner instead of crashing.
+    ─────────────────────────────────────────────────────────────── */
+    const IS_CONFIGURED =
+      SUPABASE_URL.startsWith("https://") && !SUPABASE_URL.includes("YOUR_");
+
+    let db = null;
+    if (IS_CONFIGURED) {
+      // `supabase` is the global from the CDN <script> in the <head>.
+      db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } else {
+      document.getElementById("config-banner").style.display = "block";
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       In-memory "staging" list. As an employee clicks Add, rows pile up
+       here. It is only sent to the database when they press Submit — but it
+       can also be SAVED LOCALLY (a "draft") so they can keep editing all week.
+    ─────────────────────────────────────────────────────────────── */
+    let currentLocation = null;
+    let staged = [];
+
+    /* ───────────────────────────────────────────────────────────────
+       DRAFTS — a private, on-this-device working copy (NOT sent to the
+       manager). Saved in the browser's localStorage, keyed by store + week,
+       so each store has its own draft and a new week starts fresh.
+    ─────────────────────────────────────────────────────────────── */
+    function draftKey(store) {
+      return `eb_draft::${store}::${mondayOf(new Date())}`;
+    }
+
+    // Save the current list locally. `silent` skips the confirmation toast
+    // (used for the automatic save when switching stores).
+    function saveDraft(silent) {
+      if (!currentLocation) { showMessage("Select your store first.", "error"); return; }
+      try {
+        localStorage.setItem(draftKey(currentLocation), JSON.stringify(staged));
+        if (!silent) {
+          showMessage(`Saved ${staged.length} item${staged.length === 1 ? "" : "s"} for ${currentLocation} — pick up anytime this week.`, "success");
+        }
+      } catch (e) {
+        if (!silent) showMessage("Couldn't save draft on this device.", "error");
+      }
+    }
+
+    // Load a store's saved draft into `staged`. Returns true if one existed.
+    function loadDraft(store) {
+      try {
+        const raw = localStorage.getItem(draftKey(store));
+        if (raw) { staged = JSON.parse(raw); return true; }
+      } catch (e) { /* corrupted/unavailable — fall through to empty */ }
+      staged = [];
+      return false;
+    }
+
+    // Remove a store's saved draft (after submitting, or clearing the list).
+    function clearDraft(store) {
+      try { localStorage.removeItem(draftKey(store)); } catch (e) { /* ignore */ }
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       DATE HELPER — return the Monday of the week that `date` falls in,
+       formatted as "YYYY-MM-DD" (the format Postgres `date` columns like).
+       We anchor every submission to its Monday so all 6 stores' counts
+       for the same week line up under one `week_of` value.
+    ─────────────────────────────────────────────────────────────── */
+    function mondayOf(date) {
+      const d = new Date(date);
+      const day = d.getDay();              // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+      const shift = (day === 0) ? -6 : (1 - day);  // how many days back to Monday
+      d.setDate(d.getDate() + shift);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    // Turn "2026-06-15" into "Week of Jun 15, 2026" for nicer display.
+    function formatWeek(iso) {
+      const [y, m, d] = iso.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);    // build in LOCAL time to avoid timezone drift
+      return "Week of " + dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       VIEW SWITCHING  (Employee  ⇄  Manager)
+    ═══════════════════════════════════════════════════════════════ */
+    function showView(view) {
+      document.getElementById("employee-view").style.display = (view === "employee") ? "block" : "none";
+      document.getElementById("manager-view").style.display  = (view === "manager")  ? "block" : "none";
+      document.getElementById("tab-employee").classList.toggle("active", view === "employee");
+      document.getElementById("tab-manager").classList.toggle("active", view === "manager");
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TOAST — small popup for success / error feedback
+    ═══════════════════════════════════════════════════════════════ */
+    let toastTimer;
+    function showMessage(text, type) {
+      const t = document.getElementById("toast");
+      t.textContent = text;
+      t.className = "toast show" + (type ? " " + type : "");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { t.className = "toast"; }, 4000);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COMBOBOX #1 — STORE SELECTOR (searchable dropdown of all stores)
+       ───────────────────────────────────────────────────────────────
+       Behaviour:
+        • Click/focus the box → shows the FULL store list (scrollable).
+        • Type → filters live to stores containing the typed text anywhere
+          (so "Culver" matches "EQ Culver City").
+        • Click a result, or arrow-key to it and press Enter, to select.
+    ═══════════════════════════════════════════════════════════════ */
+    const storeInput = document.getElementById("store-input");
+    const storeListEl = document.getElementById("store-list");
+    let storeFiltered = [];      // the stores currently shown in the dropdown
+    let storeActive = -1;        // which one is highlighted (for arrow keys)
+
+    function openStoreList(filterText) {
+      const q = filterText.trim().toLowerCase();
+      // No text → show everything; otherwise keep stores that CONTAIN the text.
+      storeFiltered = q ? STORES.filter(s => s.toLowerCase().includes(q)) : STORES.slice();
+      storeActive = -1;
+
+      if (storeFiltered.length === 0) {
+        storeListEl.innerHTML = '<div class="combo-note">No stores match.</div>';
+      } else {
+        storeListEl.innerHTML = storeFiltered
+          // onmousedown (not onclick) fires before the input's blur closes the list.
+          .map((s, i) => `<div class="combo-option" onmousedown="pickStore(${i})">${highlight(s, q)}</div>`)
+          .join("");
+      }
+      storeListEl.classList.add("open");
+    }
+
+    function pickStore(i) {
+      const name = storeFiltered[i];
+      if (!name) return;
+      storeInput.value = name;
+      storeListEl.classList.remove("open");
+      setStore(name);
+    }
+
+    /* Set the active store and load THAT store's saved draft (if any) so the
+       employee picks up where they left off. The previous store's list is
+       auto-saved first so nothing is lost when switching. */
+    function setStore(name) {
+      if (currentLocation && currentLocation !== name && staged.length) saveDraft(true);
+      currentLocation = name;
+      const had = loadDraft(name);
+      render();
+      if (had) showMessage(`Loaded your saved list for ${name} (${staged.length} item${staged.length === 1 ? "" : "s"})`, "success");
+    }
+
+    storeInput.addEventListener("focus", () => openStoreList(storeInput.value));
+    storeInput.addEventListener("input", () => {
+      // Typing invalidates a previous pick unless the text still EXACTLY names a store.
+      const exact = STORES.find(s => s.toLowerCase() === storeInput.value.trim().toLowerCase());
+      if (exact) {
+        if (exact !== currentLocation) setStore(exact);   // load the store's draft once
+      } else {
+        currentLocation = null;
+        render();
+      }
+      openStoreList(storeInput.value);
+    });
+    // Small delay so a click on an option registers before the list hides.
+    // Then snap the box back to the selected store (or empty) so a half-typed,
+    // invalid store name can never be left behind.
+    storeInput.addEventListener("blur", () => setTimeout(() => {
+      storeListEl.classList.remove("open");
+      storeInput.value = currentLocation || "";
+    }, 120));
+    storeInput.addEventListener("keydown", e => comboKeys(e, "store"));
+
+    /* ═══════════════════════════════════════════════════════════════
+       COMBOBOX #2 — ITEM AUTOCOMPLETE
+       ───────────────────────────────────────────────────────────────
+       Behaviour:
+        • Nothing shows until the user starts typing.
+        • Then it lists items containing the typed text anywhere (so
+          "Liposomal" matches "Akasha Superfoods - Liposomal Sea Moss…").
+        • Results are capped at ITEM_LIMIT so a 2-letter search doesn't
+          render thousands of rows; a note tells you to keep typing.
+        • Only items FROM the catalog can be added — custom names are
+          rejected (the item must match an existing entry).
+    ═══════════════════════════════════════════════════════════════ */
+    const itemInput = document.getElementById("item-name");
+    const itemListEl = document.getElementById("item-list");
+    let itemFiltered = [];
+    let itemActive = -1;
+    let itemSelected = "";        // the catalog item currently chosen (canonical text)
+    const ITEM_LIMIT = 50;
+
+    function openItemList(filterText) {
+      const q = filterText.trim().toLowerCase();
+      itemActive = -1;
+
+      if (q.length < 1) { itemListEl.classList.remove("open"); return; }  // no dropdown until typing
+
+      const matches = ITEMS.filter(it => it.toLowerCase().includes(q));
+      itemFiltered = matches.slice(0, ITEM_LIMIT);
+
+      if (itemFiltered.length === 0) {
+        itemListEl.innerHTML = '<div class="combo-note">No matching item — pick one from the catalog.</div>';
+      } else {
+        let html = itemFiltered
+          .map((s, i) => `<div class="combo-option" onmousedown="pickItem(${i})">${highlight(s, q)}</div>`)
+          .join("");
+        if (matches.length > ITEM_LIMIT) {
+          html += `<div class="combo-note">+${matches.length - ITEM_LIMIT} more — keep typing to narrow…</div>`;
+        }
+        itemListEl.innerHTML = html;
+      }
+      itemListEl.classList.add("open");
+    }
+
+    function pickItem(i) {
+      const name = itemFiltered[i];
+      if (!name) return;
+      itemSelected = name;            // remember the valid choice
+      itemInput.value = name;
+      itemListEl.classList.remove("open");
+      document.getElementById("item-qty").focus();   // jump to quantity next
+    }
+
+    itemInput.addEventListener("input", () => {
+      // If what's typed exactly matches a catalog item, treat it as selected;
+      // otherwise there is no valid selection yet.
+      const exact = ITEMS.find(it => it.toLowerCase() === itemInput.value.trim().toLowerCase());
+      itemSelected = exact || "";
+      openItemList(itemInput.value);
+    });
+    itemInput.addEventListener("focus", () => { if (itemInput.value.trim()) openItemList(itemInput.value); });
+    // On blur, snap the box back to the last valid catalog item (or empty).
+    // This makes it impossible to leave a half-typed / invalid item in the box.
+    itemInput.addEventListener("blur", () => setTimeout(() => {
+      itemListEl.classList.remove("open");
+      itemInput.value = itemSelected;
+    }, 120));
+
+    /* ───────────────────────────────────────────────────────────────
+       Shared keyboard handler for both comboboxes: ↑/↓ to move the
+       highlight, Enter to choose it, Esc to close.
+    ─────────────────────────────────────────────────────────────── */
+    function comboKeys(e, which) {
+      const isStore = which === "store";
+      const listEl = isStore ? storeListEl : itemListEl;
+      if (!listEl.classList.contains("open")) return;
+
+      const filtered = isStore ? storeFiltered : itemFiltered;
+      let active = isStore ? storeActive : itemActive;
+
+      if (e.key === "ArrowDown")      { e.preventDefault(); active = Math.min(active + 1, filtered.length - 1); }
+      else if (e.key === "ArrowUp")   { e.preventDefault(); active = Math.max(active - 1, 0); }
+      else if (e.key === "Escape")    { listEl.classList.remove("open"); return; }
+      else if (e.key === "Enter") {
+        // Enter picks the highlighted row; if none is highlighted but there is
+        // exactly one match, pick that (unambiguous).
+        let pick = active;
+        if (pick < 0 && filtered.length === 1) pick = 0;
+        if (pick >= 0) { e.preventDefault(); isStore ? pickStore(pick) : pickItem(pick); }
+        return;
+      }
+      else return;
+
+      if (isStore) storeActive = active; else itemActive = active;
+
+      // Repaint highlight + keep the active row in view.
+      const opts = listEl.querySelectorAll(".combo-option");
+      opts.forEach((el, i) => el.classList.toggle("active", i === active));
+      if (opts[active]) opts[active].scrollIntoView({ block: "nearest" });
+    }
+
+    /* Wrap a matched substring in <strong> so the user sees WHY a result
+       matched. Everything is HTML-escaped first to stay safe. */
+    function highlight(text, q) {
+      if (!q) return escHtml(text);
+      const idx = text.toLowerCase().indexOf(q);
+      if (idx < 0) return escHtml(text);
+      return escHtml(text.slice(0, idx))
+        + "<strong>" + escHtml(text.slice(idx, idx + q.length)) + "</strong>"
+        + escHtml(text.slice(idx + q.length));
+    }
+
+    // Color the quantity badge: red if very low, amber if low, green otherwise.
+    function qtyClass(n) {
+      if (n <= 2) return "qty-crit";
+      if (n <= 5) return "qty-low";
+      return "qty-ok";
+    }
+
+    // Re-draw the staged list from the `staged` array.
+    function render(newIndex) {
+      const tbody      = document.getElementById("inventory-body");
+      const table      = document.getElementById("inventory-table");
+      const empty      = document.getElementById("empty-state");
+      const submitWrap = document.getElementById("submit-wrap");
+      const locDisp    = document.getElementById("location-display");
+
+      locDisp.textContent = currentLocation || "No store selected";
+      tbody.innerHTML = "";
+
+      if (!currentLocation || staged.length === 0) {
+        table.style.display = "none";
+        submitWrap.style.display = "none";
+        empty.style.display = "block";
+        empty.textContent = currentLocation
+          ? "No items yet — add one above."
+          : "Select a store and add items above.";
+        return;
+      }
+
+      table.style.display = "table";
+      empty.style.display = "none";
+      submitWrap.style.display = "block";
+
+      staged.forEach((item, i) => {
+        const tr = document.createElement("tr");
+        if (i === newIndex) tr.classList.add("row-new");
+        const notes = item.notes ? `<div class="row-notes">${escHtml(item.notes)}</div>` : "";
+        // Quantity is now a stepper:  [ − ]  3  [ + ]  so counts are easy to fix.
+        tr.innerHTML = `
+          <td class="item-id">${escHtml(item.id || "—")}</td>
+          <td class="item-name">${escHtml(item.name)}${notes}</td>
+          <td>
+            <span class="qty-stepper">
+              <button class="step-btn" onclick="changeQty(${i}, -1)" title="Decrease">&minus;</button>
+              <span class="qty-num ${qtyClass(item.qty)}">${item.qty}</span>
+              <button class="step-btn" onclick="changeQty(${i}, 1)" title="Increase">+</button>
+            </span>
+          </td>
+          <td><button class="del-btn" onclick="deleteItem(${i})" title="Remove">&#x2715;</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("submit-hint").textContent =
+        `${staged.length} item${staged.length === 1 ? "" : "s"} · Save for Later keeps it private for editing this week · Submit sends it to the manager`;
+    }
+
+    function addItem() {
+      // Store must be one of the 6/100 valid stores (set only by the combobox).
+      if (!currentLocation) { showMessage("Please select your store from the list.", "error"); return; }
+
+      const idEl    = document.getElementById("item-id");
+      const nameEl  = document.getElementById("item-name");
+      const qtyEl   = document.getElementById("item-qty");
+      const notesEl = document.getElementById("item-notes");
+
+      const id    = idEl.value.trim();
+      const typed = nameEl.value.trim();
+      const qty   = parseInt(qtyEl.value, 10);
+      const notes = notesEl.value.trim();
+
+      if (!typed) { nameEl.focus(); return; }
+
+      // Item MUST match a catalog entry — no custom names allowed. We look up
+      // the canonical spelling so the stored name always matches the catalog.
+      const name = ITEMS.find(it => it.toLowerCase() === typed.toLowerCase());
+      if (!name) {
+        showMessage("Pick an item from the list — custom names aren't allowed.", "error");
+        nameEl.focus();
+        openItemList(typed);
+        return;
+      }
+
+      if (isNaN(qty) || qty < 0) { qtyEl.focus(); return; }
+
+      // Is this item already staged? Match by its (canonical) name.
+      const existing = staged.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
+
+      let newIndex;
+      if (existing >= 0) {
+        // Same item again → ADD the quantities together (e.g. 23 + 54 = 77).
+        staged[existing].qty += qty;
+        // Keep any earlier note; append the new one if it's different.
+        if (notes && staged[existing].notes !== notes) {
+          staged[existing].notes = staged[existing].notes
+            ? staged[existing].notes + "; " + notes
+            : notes;
+        }
+        if (id && !staged[existing].id) staged[existing].id = id;
+        newIndex = existing;
+        showMessage(`Added ${qty} more — ${name} now ${staged[existing].qty}`, "success");
+      } else {
+        staged.push({ id, name, qty, notes });
+        newIndex = staged.length - 1;
+      }
+
+      render(newIndex);
+
+      idEl.value = ""; nameEl.value = ""; qtyEl.value = ""; notesEl.value = "";
+      itemSelected = "";                     // clear the remembered item choice
+      itemListEl.classList.remove("open");   // close any open autocomplete
+      idEl.focus();
+      saveDraft(true);                       // auto-save so nothing is lost
+    }
+
+    // +/- buttons on each staged row. Quantity never goes below 0.
+    function changeQty(index, delta) {
+      const item = staged[index];
+      if (!item) return;
+      item.qty = Math.max(0, item.qty + delta);
+      render();
+      saveDraft(true);            // keep the saved draft in sync
+    }
+
+    function deleteItem(index) {
+      staged.splice(index, 1);
+      render();
+      saveDraft(true);            // keep the saved draft in sync
+    }
+
+    function clearAll() {
+      if (!staged.length) return;
+      if (confirm(`Clear all items for ${currentLocation}? This also deletes the saved draft.`)) {
+        staged = [];
+        clearDraft(currentLocation);
+        render();
+      }
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       SUBMIT — send every staged row to Supabase in one insert call.
+       Each row carries: store_name, item_id, item_name, quantity, notes,
+       and week_of (Monday). `submitted_at` is filled in by the database
+       automatically (its default is now()).
+    ─────────────────────────────────────────────────────────────── */
+    async function submitInventory() {
+      if (!db) { showMessage("Not connected to Supabase — see SETUP.md", "error"); return; }
+      if (!currentLocation) { showMessage("Please select your store first.", "error"); return; }
+      if (staged.length === 0) { showMessage("Add at least one item before submitting.", "error"); return; }
+
+      const week = mondayOf(new Date());
+      const rows = staged.map(item => ({
+        store_name: currentLocation,
+        item_id:    item.id || null,
+        item_name:  item.name,
+        quantity:   item.qty,
+        notes:      item.notes || null,
+        week_of:    week
+        // submitted_at is set by the database default (now())
+      }));
+
+      // Disable the button so a slow network can't cause a double-submit.
+      const btn = document.getElementById("submit-btn");
+      btn.disabled = true;
+      btn.textContent = "Submitting…";
+
+      // `insert` sends the rows; `error` is null on success.
+      const { error } = await db.from("inventory_submissions").insert(rows);
+
+      btn.disabled = false;
+      btn.textContent = "Submit This Week's Count";
+
+      if (error) {
+        showMessage("Submit failed: " + error.message, "error");
+        return;
+      }
+
+      showMessage(`✓ Submitted ${rows.length} item${rows.length === 1 ? "" : "s"} for ${currentLocation}`, "success");
+      clearDraft(currentLocation);   // the week's count is finalized — drop the local draft
+      staged = [];      // clear the form after a successful submit
+      render();
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MANAGER DASHBOARD
+    ═══════════════════════════════════════════════════════════════ */
+    function unlockManager() {
+      const entered = document.getElementById("manager-pass").value;
+      if (entered !== MANAGER_PASSWORD) {
+        showMessage("Incorrect password.", "error");
+        return;
+      }
+      document.getElementById("manager-locked").style.display = "none";
+      document.getElementById("manager-dashboard").style.display = "block";
+      // Populate the week dropdown, then load whichever week is selected.
+      populateWeeks().then(loadDashboard);
+    }
+
+    // Allow pressing Enter in the password box to unlock.
+    document.getElementById("manager-pass").addEventListener("keydown", e => {
+      if (e.key === "Enter") unlockManager();
+    });
+
+    /* Fill the "Week of" dropdown with every week that has data, plus the
+       current week (so a manager can always see this week even if empty). */
+    async function populateWeeks() {
+      const sel = document.getElementById("week-select");
+      const currentWeek = mondayOf(new Date());
+      let weeks = [currentWeek];
+
+      if (db) {
+        // Grab every week_of value, newest first, and collect the distinct ones.
+        const { data, error } = await db
+          .from("inventory_submissions")
+          .select("week_of")
+          .order("week_of", { ascending: false });
+
+        if (!error && data) {
+          for (const row of data) {
+            if (!weeks.includes(row.week_of)) weeks.push(row.week_of);
+          }
+        }
+      }
+
+      // Distinct + sorted newest → oldest.
+      weeks = [...new Set(weeks)].sort().reverse();
+
+      sel.innerHTML = weeks
+        .map(w => `<option value="${w}">${formatWeek(w)}</option>`)
+        .join("");
+      sel.value = currentWeek;   // default to this week
+    }
+
+    /* Pull all submissions for the selected week and draw the pivot table. */
+    async function loadDashboard() {
+      const wrap = document.getElementById("dashboard-table-wrap");
+
+      if (!db) {
+        wrap.innerHTML = '<div class="empty-state">Not connected to Supabase — see SETUP.md</div>';
+        return;
+      }
+
+      const week = document.getElementById("week-select").value;
+      wrap.innerHTML = '<div class="empty-state">Loading…</div>';
+
+      const { data, error } = await db
+        .from("inventory_submissions")
+        .select("*")
+        .eq("week_of", week);          // only this week's rows
+
+      if (error) {
+        wrap.innerHTML = `<div class="empty-state">Error: ${escHtml(error.message)}</div>`;
+        return;
+      }
+
+      renderDashboard(data || []);
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       Build the pivot: one row per item, one column per store, plus a
+       Total column on the right and an "All Items" totals row at the bottom.
+
+       The store COLUMNS are built from whichever stores actually submitted
+       this week (sorted A→Z), so the table only shows stores with data
+       rather than every store in the company.
+
+       NOTE: if a store submits the same item twice in one week, the
+       quantities ADD together here. That keeps the math simple; if you'd
+       rather have the latest submission win, tell me and I'll adjust.
+    ─────────────────────────────────────────────────────────────── */
+    function renderDashboard(rows) {
+      const wrap = document.getElementById("dashboard-table-wrap");
+
+      if (!rows.length) {
+        wrap.innerHTML = '<div class="empty-state">No submissions for this week yet.</div>';
+        return;
+      }
+
+      // Which stores submitted this week? (the dynamic set of columns)
+      const stores = [...new Set(rows.map(r => r.store_name))].sort((a, b) => a.localeCompare(b));
+
+      // Group rows by item. Use item_id as the key when present, else the name.
+      const items = {};
+      for (const r of rows) {
+        const key = (r.item_id && String(r.item_id).trim())
+          ? "id:" + String(r.item_id).toLowerCase()
+          : "name:" + r.item_name.toLowerCase();
+
+        if (!items[key]) items[key] = { name: r.item_name, stores: {}, total: 0 };
+
+        const q = Number(r.quantity) || 0;
+        items[key].stores[r.store_name] = (items[key].stores[r.store_name] || 0) + q;
+        items[key].total += q;
+      }
+
+      const itemList = Object.values(items).sort((a, b) => a.name.localeCompare(b.name));
+
+      // Running totals per store (for the footer row) and a grand total.
+      const storeTotals = {};
+      let grandTotal = 0;
+
+      // --- Header row: Item | <each store that submitted> | Total ---
+      let html = '<table class="dash-table"><thead><tr><th class="item-col">Item</th>';
+      for (const s of stores) html += `<th>${escHtml(s)}</th>`;
+      html += '<th class="total-col">Total</th></tr></thead><tbody>';
+
+      // --- One row per item ---
+      for (const it of itemList) {
+        html += `<tr><td class="item-col">${escHtml(it.name)}</td>`;
+        for (const s of stores) {
+          const v = it.stores[s] || 0;
+          storeTotals[s] = (storeTotals[s] || 0) + v;
+          html += `<td>${v || "—"}</td>`;          // show a dash for zero / no count
+        }
+        html += `<td class="total-col">${it.total}</td></tr>`;
+        grandTotal += it.total;
+      }
+
+      // --- Footer: totals across all items ---
+      html += '</tbody><tfoot><tr><td class="item-col">All Items</td>';
+      for (const s of stores) html += `<td>${storeTotals[s] || 0}</td>`;
+      html += `<td class="total-col">${grandTotal}</td></tr></tfoot></table>`;
+
+      wrap.innerHTML = html;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SHARED HELPERS / STARTUP
+    ═══════════════════════════════════════════════════════════════ */
+
+    // Escape user text before putting it into HTML (prevents broken layouts / injection).
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       Build the scrolling marquee from the full store list (EB_STORES).
+       We render the list TWICE, back to back: as the first copy scrolls
+       off the left, the identical second copy is already taking its place,
+       so the loop looks seamless. Scroll duration scales with the number
+       of stores so the reading speed stays comfortable as the list grows.
+    ─────────────────────────────────────────────────────────────── */
+    function buildMarquee() {
+      const inner = document.getElementById("marquee-inner");
+      if (!STORES.length) { inner.innerHTML = ""; return; }
+
+      const items = STORES
+        .map(s => `<span class="marquee-item">${escHtml(s)} <span class="marquee-dot"></span></span>`)
+        .join("");
+      const track = `<div>${items}</div>`;
+      inner.innerHTML = track + track;   // two identical tracks = seamless scroll
+
+      // ~3s per store, with a sensible minimum, so it isn't a fast blur.
+      const seconds = Math.max(30, STORES.length * 3);
+      document.documentElement.style.setProperty("--marquee-speed", seconds + "s");
+    }
+
+    // Enter key moves through the form fields, then submits the row.
+    document.getElementById("item-id").addEventListener("keydown", e => { if (e.key === "Enter") itemInput.focus(); });
+
+    // The item field shares keys with its autocomplete: when the dropdown is
+    // open, ↑/↓/Enter/Esc drive the list (handled by comboKeys); otherwise
+    // Enter just advances to the quantity field.
+    itemInput.addEventListener("keydown", e => {
+      if (itemListEl.classList.contains("open")) {
+        comboKeys(e, "item");
+        if (e.defaultPrevented || e.key === "Escape") return;
+      }
+      if (e.key === "Enter" && !itemListEl.classList.contains("open")) {
+        document.getElementById("item-qty").focus();
+      }
+    });
+
+    document.getElementById("item-qty").addEventListener("keydown",   e => { if (e.key === "Enter") document.getElementById("item-notes").focus(); });
+    document.getElementById("item-notes").addEventListener("keydown", e => { if (e.key === "Enter") addItem(); });
+
+    // Start on the employee view with an empty list, and fill the marquee.
+    showView("employee");
+    buildMarquee();
+    render();
+  </script>
+</body>
+</html>
